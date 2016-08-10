@@ -1,6 +1,7 @@
 <?php
 namespace Drupal\rules\Plugin\views\display;
 
+use Drupal\rules\Context\ContextDefinition;
 use Drupal\views\Annotation\ViewsDisplay;
 use Drupal\views\Plugin\views\display\DisplayPluginBase;
 
@@ -104,5 +105,39 @@ class Rules extends DisplayPluginBase {
    */
   public function usesExposed() {
     return FALSE;
+  }
+
+  /**
+   * Build a list of rules context definitions based on the defined views
+   * contextual arguments.
+   *
+   * @return \Drupal\rules\Context\ContextDefinitionInterface[]
+   */
+  public function getRulesContext() {
+    $context = [];
+
+    foreach ($this->getOption('arguments') as $argument_name => $argument) {
+      // Use the admin title as context label if possible.
+      $label = $argument['admin_label'] ?: $argument_name;
+
+      // If the view is configured to display all items or has a configured
+      // default value for this argument, don't mark the context as required.
+      $required = !in_array($argument['default_action'], ['ignore', 'default']);
+
+      // Default type for arguments is string.
+      $type = 'string';
+
+      // Check if views argument validation is configured for a specific entity
+      // type. Use this type as context type definition.
+      if (strpos($argument['validate']['type'], 'entity:') !== FALSE) {
+        $type = $argument['validate']['type'];
+      }
+
+      $context[$argument_name] = ContextDefinition::create($type)
+        ->setLabel($label)
+        ->setRequired($required);
+    }
+
+    return $context;
   }
 }

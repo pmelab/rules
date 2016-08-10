@@ -66,23 +66,41 @@ class EntityFetchByView extends RulesActionBase implements ContainerFactoryPlugi
    * {@inheritdoc}
    */
   public function execute() {
-    $view = $this->viewStorage->load($this->pluginDefinition['view_id'])->getExecutable();
+
+    $view_id = $this->pluginDefinition['view_id'];
+    $display_id = $this->pluginDefinition['display_id'];
+
+    // Fetch the list of available contexts.
+    $contexts = $this->getContexts();
+
+    // Pull values out of contexts.
+    $contexts = array_map(function ($context) {
+      return $context->getContextData()->getValue();
+    }, $contexts);
+
+    // Convert entities into entity ids.
+    $contexts = array_map(function ($context) {
+      return $context instanceof EntityInterface ? $context->id() : $context;
+    }, $contexts);
+
+    // Request the views executable for the current display.
+    $view = $this->viewStorage->load($view_id)->getExecutable();
+    $view->setDisplay($display_id);
+
     $arguments = [];
 
-    foreach ($this->getContexts() as $name => $context) {
-      $data = $context->getContextData()->getValue();
-      $arguments[$name] = $data instanceof EntityInterface ? $data->id() : $data;
+    // Reverse- loop through the views contextual arguments and skip empty
+    // arguments until the first defined one.
+    foreach (array_reverse(array_keys($view->display_handler->getOption('arguments'))) as $arg) {
+      if ($contexts[$arg] == '' && count($arguments) == 0) {
+        continue;
+      }
+      $arguments[$arg] = $contexts[$arg];
     }
 
-    $view->setDisplay($this->pluginDefinition['display_id']);
-
-    $real_args = array_map(function ($key) use ($arguments) {
-      return $arguments[$key];
-    }, array_keys($view->display_handler->getOption('arguments')));
-
-    $view->setArguments($real_args);
-
-    $entities = $view->render($this->pluginDefinition['display_id']);
-    $this->setProvidedValue('entity_fetched', $entities ? $entities : []);
+    // Execute the view and pass the result as provided value.
+    $view->setArguments($arguments);
+    $entities = $view->render($this->pluginDefinition['display_id']) ?: [];
+    $this->setProvidedValue('entity_fetched', $entities);
   }
 }
